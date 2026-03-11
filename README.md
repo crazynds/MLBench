@@ -13,7 +13,7 @@ Terminal tool to measure **throughput**, **latency** and run **stress tests** fo
 | `yolov11` | YOLOv11n | Object Detection | Synthetic COCO |
 | `stable_diffusion` | Stable Diffusion v1.5 | Text-to-Image | Built-in prompts |
 | `dlrm_v2` | DLRM v2 | Recommendation | Synthetic Criteo |
-| `whisper` | Whisper-base | Speech Recognition | LibriSpeech sample / Synthetic |
+| ` ` | Whisper-base | Speech Recognition | LibriSpeech sample / Synthetic |
 
 ---
 
