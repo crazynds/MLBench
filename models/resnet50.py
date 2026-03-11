@@ -17,17 +17,16 @@ class ResNet50Handler(BaseModelHandler):
         self.logger.info("  ✅ ResNet50 loaded")
 
     def prepare_data(self):
-        # Synthetic ImageNet-like batch: [B, 3, 224, 224]
-        self._sample_batch = torch.randn(
-            self.batch_size, 3, 224, 224,
-            device=self.device,
-            dtype=self.dtype,
-        )
-        self.logger.info(f"  ✅ Sample batch ready: {tuple(self._sample_batch.shape)}")
+        self._batches = [
+            torch.randn(self.batch_size, 3, 224, 224, device=self.device, dtype=self.dtype)
+            for _ in range(self.NUM_PRECOMPUTED_BATCHES)
+        ]
+        self.logger.info(f"  ✅ {self.NUM_PRECOMPUTED_BATCHES} batches ready: {tuple(self._batches[0].shape)}")
 
     def run_inference(self):
+        batch = self._batches[self._next_batch_idx()]
         with torch.no_grad():
             with self._autocast_context():
-                _ = self.model(self._sample_batch)
+                _ = self.model(batch)
         if torch.cuda.is_available() and str(self.device) != "cpu":
             torch.cuda.synchronize()

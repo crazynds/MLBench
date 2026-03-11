@@ -35,26 +35,31 @@ class WhisperHandler(BaseModelHandler):
         self.logger.info("  ✅ Whisper-base loaded")
 
     def prepare_data(self):
-        """Load real audio samples if available, otherwise generate synthetic."""
-        audio_samples = self._load_real_audio()
+        """Precompute NUM_PRECOMPUTED_BATCHES mel feature batches."""
+        real_audio = self._load_real_audio()
 
-        if not audio_samples:
-            self.logger.info("  ℹ️  Using synthetic audio (white noise)")
-            audio_samples = self._generate_synthetic_audio()
+        self._batches = []
+        for i in range(self.NUM_PRECOMPUTED_BATCHES):
+            if real_audio:
+                # Cycle through real samples with a different offset per batch
+                offset = (i * self.batch_size) % len(real_audio)
+                indices = [(offset + j) % len(real_audio) for j in range(self.batch_size)]
+                samples = [real_audio[k] for k in indices]
+            else:
+                samples = self._generate_synthetic_audio()
+            self._batches.append(self._encode_audio(samples))
 
-        # Process audio into input features
-        self._input_features = self._encode_audio(audio_samples)
-        self.logger.info(f"  ✅ Audio batch ready: {tuple(self._input_features.shape)}")
+        source = "real audio" if real_audio else "synthetic audio"
+        self.logger.info(f"  ✅ {self.NUM_PRECOMPUTED_BATCHES} batches ready ({source}): {tuple(self._batches[0].shape)}")
 
     def _load_real_audio(self):
         """Try to load real audio from HF dataset cache."""
         try:
-            from datasets import load_from_disk, load_dataset
+            from datasets import load_dataset
             sentinel = AUDIO_DATASET_DIR / ".downloaded"
             if not sentinel.exists():
                 return []
 
-            # Try loading cached dataset
             try:
                 ds = load_dataset(
                     "hf-internal-testing/librispeech_asr_demo",
@@ -64,12 +69,11 @@ class WhisperHandler(BaseModelHandler):
                     trust_remote_code=True,
                 )
                 samples = []
-                for i in range(min(self.batch_size, len(ds))):
+                for i in range(len(ds)):
                     audio = ds[i]["audio"]
                     arr = np.array(audio["array"], dtype=np.float32)
                     sr = audio["sampling_rate"]
                     if sr != SAMPLE_RATE:
-                        # Simple resample by slicing
                         factor = SAMPLE_RATE / sr
                         new_len = int(len(arr) * factor)
                         arr = np.interp(
@@ -77,7 +81,6 @@ class WhisperHandler(BaseModelHandler):
                             np.arange(len(arr)),
                             arr,
                         ).astype(np.float32)
-                    # Trim/pad to AUDIO_DURATION_SEC
                     target_len = SAMPLE_RATE * AUDIO_DURATION_SEC
                     if len(arr) > target_len:
                         arr = arr[:target_len]
@@ -96,11 +99,9 @@ class WhisperHandler(BaseModelHandler):
         samples = []
         target_len = SAMPLE_RATE * AUDIO_DURATION_SEC
         for _ in range(self.batch_size):
-            # Generate noise in speech frequency band (100-4000 Hz)
             t = np.linspace(0, AUDIO_DURATION_SEC, target_len)
-            # Mix of tones to simulate speech
             audio = sum(
-                0.1 * np.sin(2 * np.pi * freq * t)
+                0.1 * np.sin(2 * np.pi * freq * t + np.random.uniform(0, 2 * np.pi))
                 for freq in [200, 400, 800, 1600]
             )
             audio = audio.astype(np.float32)
@@ -119,9 +120,10 @@ class WhisperHandler(BaseModelHandler):
         return inputs.input_features.to(self.device, dtype=self.dtype)
 
     def run_inference(self):
+        features = self._batches[self._next_batch_idx()]
         with torch.no_grad():
             _ = self.model.generate(
-                self._input_features,
+                features,
                 max_new_tokens=128,
                 language="en",
                 task="transcribe",

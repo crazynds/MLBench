@@ -1,6 +1,7 @@
 """Stable Diffusion v1.5 handler — Text-to-Image Generation"""
 
 import torch
+import itertools
 from pathlib import Path
 from models.base import BaseModelHandler
 
@@ -28,7 +29,6 @@ class StableDiffusionHandler(BaseModelHandler):
             raise ImportError("diffusers not installed. Run: pip install diffusers>=0.21 accelerate")
 
         torch_dtype = self.dtype if self.dtype != torch.float32 else torch.float32
-        # fp16 is recommended for SD to reduce memory
         if self.dtype == torch.float32 and str(self.device) != "cpu":
             self.logger.info("  ℹ️  Consider --precision fp16 for SD to reduce VRAM usage")
 
@@ -41,7 +41,6 @@ class StableDiffusionHandler(BaseModelHandler):
         )
         self.pipe = self.pipe.to(self.device)
 
-        # Speed optimizations
         try:
             self.pipe.enable_attention_slicing()
         except Exception:
@@ -50,21 +49,24 @@ class StableDiffusionHandler(BaseModelHandler):
         self.logger.info("  ✅ Stable Diffusion loaded")
 
     def prepare_data(self):
-        import itertools
-        # Cycle through prompts for the batch
         cycle = itertools.cycle(SAMPLE_PROMPTS)
-        self._prompts = [next(cycle) for _ in range(self.batch_size)]
-        self.logger.info(f"  ✅ {len(SAMPLE_PROMPTS)} prompts ready, using batch of {self.batch_size}")
+        # Each batch gets a different rotation of prompts
+        self._batches = [
+            [next(cycle) for _ in range(self.batch_size)]
+            for _ in range(self.NUM_PRECOMPUTED_BATCHES)
+        ]
+        self.logger.info(f"  ✅ {self.NUM_PRECOMPUTED_BATCHES} prompt batches ready (batch_size={self.batch_size})")
 
     def run_inference(self):
+        prompts = self._batches[self._next_batch_idx()]
         with torch.no_grad():
             _ = self.pipe(
-                self._prompts,
+                prompts,
                 num_inference_steps=20,
                 guidance_scale=7.5,
                 height=512,
                 width=512,
-                output_type="latent",  # skip VAE decode for speed
+                output_type="latent",
             )
         if torch.cuda.is_available() and str(self.device) != "cpu":
             torch.cuda.synchronize()

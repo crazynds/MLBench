@@ -19,22 +19,24 @@ class YOLOv11Handler(BaseModelHandler):
         weights = str(YOLO_WEIGHTS_PATH) if YOLO_WEIGHTS_PATH.exists() else "yolo11n.pt"
         self.model = YOLO(weights)
 
-        # Move to device
         device_str = str(self.device)
         self._yolo_device = device_str
         self.logger.info(f"  ✅ YOLOv11n loaded on {device_str}")
 
     def prepare_data(self):
-        # Generate synthetic BGR images as numpy arrays (HxWxC uint8)
-        self._sample_batch = [
-            np.random.randint(0, 255, (640, 640, 3), dtype=np.uint8)
-            for _ in range(self.batch_size)
+        self._batches = [
+            [
+                np.random.randint(0, 255, (640, 640, 3), dtype=np.uint8)
+                for _ in range(self.batch_size)
+            ]
+            for _ in range(self.NUM_PRECOMPUTED_BATCHES)
         ]
-        self.logger.info(f"  ✅ Sample batch ready: {self.batch_size}x [640, 640, 3]")
+        self.logger.info(f"  ✅ {self.NUM_PRECOMPUTED_BATCHES} batches ready: {self.batch_size}x [640, 640, 3]")
 
     def run_inference(self):
+        batch = self._batches[self._next_batch_idx()]
         _ = self.model.predict(
-            self._sample_batch,
+            batch,
             device=self._yolo_device,
             verbose=False,
             half=(self.dtype == torch.float16),

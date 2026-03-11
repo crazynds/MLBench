@@ -8,14 +8,17 @@ from pathlib import Path
 class BaseModelHandler(abc.ABC):
     MODELS_DIR = Path("data/models")
     DATASETS_DIR = Path("data/datasets")
+    NUM_PRECOMPUTED_BATCHES = 32
 
     def __init__(self, device, precision: str, batch_size: int, logger):
         self.device = device
         self.precision = precision
         self.batch_size = batch_size
+        self.NUM_PRECOMPUTED_BATCHES = max(1024//batch_size, self.NUM_PRECOMPUTED_BATCHES)
         self.logger = logger
         self.model = None
-        self._sample_batch = None
+        self._batches = []
+        self._batch_idx = 0
 
         # Resolve dtype
         self.dtype = {
@@ -24,6 +27,11 @@ class BaseModelHandler(abc.ABC):
             "bf16": torch.bfloat16,
         }.get(precision, torch.float32)
 
+    def _next_batch_idx(self) -> int:
+        idx = self._batch_idx % len(self._batches)
+        self._batch_idx += 1
+        return idx
+
     @abc.abstractmethod
     def load(self):
         """Load model weights onto device"""
@@ -31,7 +39,7 @@ class BaseModelHandler(abc.ABC):
 
     @abc.abstractmethod
     def prepare_data(self):
-        """Load or generate a sample batch for inference"""
+        """Precompute NUM_PRECOMPUTED_BATCHES batches for inference"""
         ...
 
     @abc.abstractmethod
@@ -43,8 +51,7 @@ class BaseModelHandler(abc.ABC):
         """Free GPU memory"""
         del self.model
         self.model = None
-        del self._sample_batch
-        self._sample_batch = None
+        self._batches.clear()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 

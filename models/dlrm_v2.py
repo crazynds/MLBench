@@ -22,14 +22,12 @@ class DLRMv2(nn.Module):
         super().__init__()
 
         if embedding_table_sizes is None:
-            # Criteo-like 26 sparse features, reduced sizes for demo
             embedding_table_sizes = [int(1e4)] * 26
 
         if bottom_mlp_sizes is None:
             bottom_mlp_sizes = [512, 256, embedding_dim]
 
         if top_mlp_sizes is None:
-            # interaction output: embedding_dim + num_interactions
             num_sparse = len(embedding_table_sizes)
             num_interactions = (num_sparse + 1) * num_sparse // 2 + embedding_dim
             top_mlp_sizes = [512, 256, 1]
@@ -48,7 +46,6 @@ class DLRMv2(nn.Module):
             for size in embedding_table_sizes
         ])
 
-        # Interaction: concat + dot products
         self.embedding_dim = embedding_dim
         num_sparse = len(embedding_table_sizes)
         interact_out = (num_sparse + 1) * num_sparse // 2 + embedding_dim
@@ -65,29 +62,20 @@ class DLRMv2(nn.Module):
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, dense_x, sparse_x, sparse_offsets):
-        # Bottom MLP on dense features
-        dense_out = self.bottom_mlp(dense_x)  # [B, emb_dim]
+        dense_out = self.bottom_mlp(dense_x)
 
-        # Embedding lookup
         emb_outs = []
         for i, emb in enumerate(self.embeddings):
-            emb_outs.append(emb(sparse_x[:, i], sparse_offsets))  # [B, emb_dim]
+            emb_outs.append(emb(sparse_x[:, i], sparse_offsets))
 
-        # Stack: [num_sparse+1, B, emb_dim]
-        all_embs = torch.stack([dense_out] + emb_outs, dim=1)  # [B, num_sparse+1, emb_dim]
+        all_embs = torch.stack([dense_out] + emb_outs, dim=1)
 
-        # Dot product interactions
-        B = all_embs.shape[0]
-        interact = torch.bmm(all_embs, all_embs.transpose(1, 2))  # [B, N, N]
+        interact = torch.bmm(all_embs, all_embs.transpose(1, 2))
         N = all_embs.shape[1]
-        # Upper triangle indices
         rows, cols = torch.triu_indices(N, N, offset=1)
-        interact_flat = interact[:, rows, cols]  # [B, num_interactions]
+        interact_flat = interact[:, rows, cols]
 
-        # Concat dense + interactions
         x = torch.cat([dense_out, interact_flat], dim=1)
-
-        # Top MLP
         out = self.sigmoid(self.top_mlp(x))
         return out
 
@@ -108,7 +96,6 @@ class DLRMv2Handler(BaseModelHandler):
         self.model.eval()
         self.model.to(self.device)
         if self.dtype in (torch.float16, torch.bfloat16):
-            # Keep embeddings in fp32, cast MLP layers only
             self.model.bottom_mlp = self.model.bottom_mlp.to(dtype=self.dtype)
             self.model.top_mlp = self.model.top_mlp.to(dtype=self.dtype)
             self.logger.info(f"  ℹ️  Embeddings kept in fp32, MLPs cast to {self.precision}")
@@ -118,24 +105,19 @@ class DLRMv2Handler(BaseModelHandler):
 
     def prepare_data(self):
         B = self.batch_size
-        # Dense features
-        self._dense = torch.randn(B, self.NUM_DENSE, device=self.device, dtype=torch.float32)
-
-        # Sparse features: each sample has 1 lookup per table → shape [B, num_sparse]
-        self._sparse = torch.randint(
-            0, min(self.EMB_TABLE_SIZES),
-            (B, self.NUM_SPARSE),
-            device=self.device,
-        )
-
-        # EmbeddingBag offsets: one lookup per row → sequential offsets
-        self._offsets = torch.zeros(B, dtype=torch.long, device=self.device)
-
-        self.logger.info(f"  ✅ Synthetic Criteo batch ready: dense={tuple(self._dense.shape)}, "
-                         f"sparse={tuple(self._sparse.shape)}")
+        self._batches = [
+            (
+                torch.randn(B, self.NUM_DENSE, device=self.device, dtype=torch.float32),
+                torch.randint(0, min(self.EMB_TABLE_SIZES), (B, self.NUM_SPARSE), device=self.device),
+                torch.zeros(B, dtype=torch.long, device=self.device),
+            )
+            for _ in range(self.NUM_PRECOMPUTED_BATCHES)
+        ]
+        self.logger.info(f"  ✅ {self.NUM_PRECOMPUTED_BATCHES} Criteo batches ready: dense=[{B},{self.NUM_DENSE}], sparse=[{B},{self.NUM_SPARSE}]")
 
     def run_inference(self):
+        dense, sparse, offsets = self._batches[self._next_batch_idx()]
         with torch.no_grad():
-            _ = self.model(self._dense, self._sparse, self._offsets)
+            _ = self.model(dense, sparse, offsets)
         if torch.cuda.is_available() and str(self.device) != "cpu":
             torch.cuda.synchronize()
