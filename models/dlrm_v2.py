@@ -28,8 +28,6 @@ class DLRMv2(nn.Module):
             bottom_mlp_sizes = [512, 256, embedding_dim]
 
         if top_mlp_sizes is None:
-            num_sparse = len(embedding_table_sizes)
-            num_interactions = (num_sparse + 1) * num_sparse // 2 + embedding_dim
             top_mlp_sizes = [512, 256, 1]
 
         # Bottom MLP
@@ -40,7 +38,7 @@ class DLRMv2(nn.Module):
             in_size = out_size
         self.bottom_mlp = nn.Sequential(*layers)
 
-        # Embedding tables
+        # Embedding tables (kept in fp32 for stability)
         self.embeddings = nn.ModuleList([
             nn.EmbeddingBag(size, embedding_dim, mode="sum", sparse=True)
             for size in embedding_table_sizes
@@ -64,9 +62,11 @@ class DLRMv2(nn.Module):
     def forward(self, dense_x, sparse_x, sparse_offsets):
         dense_out = self.bottom_mlp(dense_x)
 
-        emb_outs = []
-        for i, emb in enumerate(self.embeddings):
-            emb_outs.append(emb(sparse_x[:, i], sparse_offsets))
+        # Embeddings output fp32; cast to match dense_out dtype for interaction
+        emb_outs = [
+            emb(sparse_x[:, i], sparse_offsets).to(dtype=dense_out.dtype)
+            for i, emb in enumerate(self.embeddings)
+        ]
 
         all_embs = torch.stack([dense_out] + emb_outs, dim=1)
 
@@ -105,15 +105,17 @@ class DLRMv2Handler(BaseModelHandler):
 
     def prepare_data(self):
         B = self.batch_size
+        # dense dtype matches bottom_mlp dtype to avoid type mismatch
+        dense_dtype = self.dtype if self.dtype in (torch.float16, torch.bfloat16) else torch.float32
         self._batches = [
             (
-                torch.randn(B, self.NUM_DENSE, device=self.device, dtype=torch.float32),
+                torch.randn(B, self.NUM_DENSE, device=self.device, dtype=dense_dtype),
                 torch.randint(0, min(self.EMB_TABLE_SIZES), (B, self.NUM_SPARSE), device=self.device),
                 torch.zeros(B, dtype=torch.long, device=self.device),
             )
             for _ in range(self.NUM_PRECOMPUTED_BATCHES)
         ]
-        self.logger.info(f"  ✅ {self.NUM_PRECOMPUTED_BATCHES} Criteo batches ready: dense=[{B},{self.NUM_DENSE}], sparse=[{B},{self.NUM_SPARSE}]")
+        self.logger.info(f"  ✅ {self.NUM_PRECOMPUTED_BATCHES} Criteo batches ready: dense=[{B},{self.NUM_DENSE}] ({dense_dtype}), sparse=[{B},{self.NUM_SPARSE}]")
 
     def run_inference(self):
         dense, sparse, offsets = self._batches[self._next_batch_idx()]

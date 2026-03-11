@@ -11,6 +11,9 @@ YOLO_WEIGHTS_PATH = Path("data/models/yolov11/yolo11n.pt")
 class YOLOv11Handler(BaseModelHandler):
     def load(self):
         self.logger.info("  Loading YOLOv11n (ultralytics)...")
+        if self.dtype == torch.bfloat16:
+            raise ValueError("YOLOv11 does not support bf16. Use fp32 or fp16.")
+
         try:
             from ultralytics import YOLO
         except ImportError:
@@ -19,9 +22,9 @@ class YOLOv11Handler(BaseModelHandler):
         weights = str(YOLO_WEIGHTS_PATH) if YOLO_WEIGHTS_PATH.exists() else "yolo11n.pt"
         self.model = YOLO(weights)
 
-        device_str = str(self.device)
-        self._yolo_device = device_str
-        self.logger.info(f"  ✅ YOLOv11n loaded on {device_str}")
+        self._yolo_device = str(self.device)
+        self._half = self.dtype == torch.float16
+        self.logger.info(f"  ✅ YOLOv11n loaded on {self._yolo_device} (half={self._half})")
 
     def prepare_data(self):
         self._batches = [
@@ -39,7 +42,7 @@ class YOLOv11Handler(BaseModelHandler):
             batch,
             device=self._yolo_device,
             verbose=False,
-            half=(self.dtype == torch.float16),
+            half=self._half,
         )
         if torch.cuda.is_available() and str(self.device) != "cpu":
             torch.cuda.synchronize()
