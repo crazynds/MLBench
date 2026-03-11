@@ -113,7 +113,8 @@ class WhisperHandler(BaseModelHandler):
             audio_samples,
             sampling_rate=SAMPLE_RATE,
             return_tensors="pt",
-            padding=True,
+            padding="max_length",
+            truncation=True,
         )
         return inputs.input_features.to(self.device, dtype=self.dtype)
 
