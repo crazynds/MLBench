@@ -213,7 +213,8 @@ class StressRunner:
 
     def run(self):
         logger = self.logger
-        logger.info(f"💪 Stress Test | Model: {self.model_name} | Duration: {self.duration}s | Device: {self.device}")
+        duration_label = "∞" if self.duration == 0 else f"{self.duration}s"
+        logger.info(f"💪 Stress Test | Model: {self.model_name} | Duration: {duration_label} | Device: {self.device}")
 
         # Handle Ctrl+C gracefully
         def _sig_handler(sig, frame):
@@ -250,11 +251,13 @@ class StressRunner:
         start_time = time.perf_counter()
         last_report = start_time
 
-        logger.info(f"🚀 Starting stress test for {self.duration}s... (Press Ctrl+C to stop)\n")
+        unlimited = self.duration == 0
+        duration_label = "∞" if unlimited else f"{self.duration}s"
+        logger.info(f"🚀 Starting stress test for {duration_label}... (Press Ctrl+C to stop)\n")
 
         while not self._stop_event.is_set():
             elapsed = time.perf_counter() - start_time
-            if elapsed >= self.duration:
+            if not unlimited and elapsed >= self.duration:
                 break
 
             try:
@@ -269,19 +272,28 @@ class StressRunner:
                 # Periodic report
                 now = time.perf_counter()
                 if now - last_report >= self.interval:
-                    remaining = max(0, self.duration - elapsed)
                     tp = throughput_tracker.current_throughput()
                     gpu_info = gpu_monitor.current()
                     mem_str = f" | GPU Mem: {gpu_info.get('memory_mb', 0):.0f}MB" if gpu_info else ""
                     util_str = f" | GPU Util: {gpu_info.get('utilization', 0):.0f}%" if gpu_info else ""
-                    print(
-                        f"\r  ⏱  {elapsed:6.1f}s / {self.duration}s | "
-                        f"Iter: {total_iterations:6d} | "
-                        f"Throughput: {tp:8.2f} samples/s{mem_str}{util_str} | "
-                        f"Remaining: {remaining:.0f}s   ",
-                        end="",
-                        flush=True,
-                    )
+                    if unlimited:
+                        print(
+                            f"\r  ⏱  {elapsed:6.1f}s / ∞ | "
+                            f"Iter: {total_iterations:6d} | "
+                            f"Throughput: {tp:8.2f} samples/s{mem_str}{util_str}   ",
+                            end="",
+                            flush=True,
+                        )
+                    else:
+                        remaining = max(0, self.duration - elapsed)
+                        print(
+                            f"\r  ⏱  {elapsed:6.1f}s / {self.duration}s | "
+                            f"Iter: {total_iterations:6d} | "
+                            f"Throughput: {tp:8.2f} samples/s{mem_str}{util_str} | "
+                            f"Remaining: {remaining:.0f}s   ",
+                            end="",
+                            flush=True,
+                        )
                     last_report = now
 
             except Exception as e:

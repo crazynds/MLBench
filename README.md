@@ -70,6 +70,9 @@ python main.py benchmark --model yolov11 --device cuda:1
 # 5-minute stress test
 python main.py stress --model resnet50 --duration 300
 
+# indeterminated stress test
+python main.py stress --model resnet50 --duration 0
+
 # Stress with fp16 and custom reporting interval
 python main.py stress --model stable_diffusion --duration 600 --precision fp16 --interval 2.0
 

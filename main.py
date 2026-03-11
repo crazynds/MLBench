@@ -70,7 +70,7 @@ Examples:
         choices=list(SUPPORTED_MODELS.keys()),
         help="Model to stress test",
     )
-    stress.add_argument("--duration", type=int, default=60, help="Stress duration in seconds (default: 60)")
+    stress.add_argument("--duration", type=int, default=60, help="Stress duration in seconds (default: 60, 0 = unlimited)")
     stress.add_argument("--batch-size", type=int, default=1, help="Batch size (default: 1)")
     stress.add_argument("--precision", choices=["fp32", "fp16", "bf16"], default="fp32", help="Precision (default: fp32)")
     stress.add_argument("--device", default="auto", help="Device: auto | cpu | cuda | cuda:0 (default: auto)")
