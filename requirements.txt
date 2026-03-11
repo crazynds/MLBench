@@ -1,0 +1,27 @@
+# ── Core ──────────────────────────────────────────────────────────────────────
+# Install PyTorch with CUDA separately via:
+#   pip install torch==2.6.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+
+# ── Vision models (torchvision bundled above) ─────────────────────────────────
+
+# ── YOLO v11 ──────────────────────────────────────────────────────────────────
+ultralytics>=8.3.0
+
+# ── Stable Diffusion ──────────────────────────────────────────────────────────
+diffusers>=0.27.0
+accelerate>=0.28.0
+transformers>=4.36.0,<4.41.0
+
+# ── Whisper ───────────────────────────────────────────────────────────────────
+# transformers already listed above
+datasets>=2.18.0
+soundfile>=0.12.1
+librosa>=0.10.1
+
+# ── GPU monitoring ────────────────────────────────────────────────────────────
+nvidia-ml-py>=12.535.77
+
+# ── Misc ──────────────────────────────────────────────────────────────────────
+numpy>=1.24,<2.0
+Pillow>=10.0.0
+tqdm>=4.66.0
