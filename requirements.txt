@@ -8,7 +8,7 @@
 ultralytics>=8.3.0
 
 # ── Stable Diffusion ──────────────────────────────────────────────────────────
-diffusers>=0.27.0
+diffusers>=0.27.0,<0.30.0
 accelerate>=0.28.0
 transformers>=4.36.0,<4.41.0
 
