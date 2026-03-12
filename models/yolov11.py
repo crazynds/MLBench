@@ -16,8 +16,10 @@ class YOLOv11Handler(BaseModelHandler):
 
         try:
             from ultralytics import YOLO
-        except ImportError:
-            raise ImportError("ultralytics not installed. Run: pip install ultralytics>=8.3")
+        except ImportError as e:
+            if "ultralytics" in str(e):
+                raise ImportError("ultralytics not installed. Run: pip install ultralytics>=8.3") from e
+            raise
 
         weights = str(YOLO_WEIGHTS_PATH) if YOLO_WEIGHTS_PATH.exists() else "yolo11n.pt"
         self.model = YOLO(weights)
