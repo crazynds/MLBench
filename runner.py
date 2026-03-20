@@ -6,6 +6,7 @@ import json
 import time
 import signal
 import threading
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 from dataclasses import dataclass, field, asdict
@@ -41,6 +42,13 @@ class BenchmarkResult:
     gpu_utilization_mean: float = 0.0
     # Timing
     total_time_sec: float = 0.0
+    loading_time_sec: float = 0.0
+    warmup_time_sec: float = 0.0
+    # Timestamps (ISO 8601)
+    ts_start: str = ""
+    ts_warmup_start: str = ""
+    ts_bench_start: str = ""
+    ts_bench_end: str = ""
 
 
 @dataclass
@@ -91,6 +99,9 @@ class BenchmarkRunner:
             logger=logger,
         )
 
+        ts_start = datetime.now()
+        t_start = time.perf_counter()
+
         logger.info("📦 Loading model...")
         handler.load()
 
@@ -103,12 +114,15 @@ class BenchmarkRunner:
         latency_tracker = LatencyTracker()
 
         # ── Warmup ────────────────────────────────────────────────────────────
+        ts_warmup_start = datetime.now()
+        t_warmup_start = time.perf_counter()
         logger.info(f"🔥 Warming up ({self.warmup} iterations)...")
         for i in range(self.warmup):
             handler.run_inference()
 
         logger.info(f"🏁 Running benchmark ({self.iterations} iterations)...")
 
+        ts_bench_start = datetime.now()
         total_start = time.perf_counter()
         for i in range(self.iterations):
             t0 = time.perf_counter()
@@ -122,6 +136,7 @@ class BenchmarkRunner:
                 logger.info(f"  Progress: {i+1}/{self.iterations} ({pct:.0f}%) | "
                             f"Last latency: {latency_ms:.2f}ms")
 
+        ts_bench_end = datetime.now()
         total_elapsed = time.perf_counter() - total_start
         gpu_monitor.stop()
 
@@ -151,6 +166,12 @@ class BenchmarkRunner:
             gpu_memory_peak_mb=gpu_stats.get("memory_peak_mb", 0),
             gpu_utilization_mean=gpu_stats.get("utilization_mean", 0),
             total_time_sec=total_elapsed,
+            loading_time_sec=t_warmup_start - t_start,
+            warmup_time_sec=total_start - t_warmup_start,
+            ts_start=ts_start.isoformat(),
+            ts_warmup_start=ts_warmup_start.isoformat(),
+            ts_bench_start=ts_bench_start.isoformat(),
+            ts_bench_end=ts_bench_end.isoformat(),
         )
 
         self._print_results(result)
@@ -187,7 +208,15 @@ class BenchmarkRunner:
             print(f"  GPU:")
             print(f"    Peak Memory  : {r.gpu_memory_peak_mb:.1f} MB")
             print(f"    Mean Util    : {r.gpu_utilization_mean:.1f}%")
-        print(f"  Total Time     : {r.total_time_sec:.2f}s")
+        print("-" * 60)
+        print(f"  Timing:")
+        print(f"    Loading      : {r.loading_time_sec:.2f}s")
+        print(f"    Warmup       : {r.warmup_time_sec:.2f}s")
+        print(f"    Benchmark    : {r.total_time_sec:.2f}s")
+        print(f"    Start        : {r.ts_start}")
+        print(f"    Warmup start : {r.ts_warmup_start}")
+        print(f"    Bench start  : {r.ts_bench_start}")
+        print(f"    Bench end    : {r.ts_bench_end}")
         print("=" * 60 + "\n")
 
     def _save_results(self, result: BenchmarkResult):
