@@ -3,6 +3,7 @@ Benchmark and Stress runners
 """
 
 import json
+import math
 import time
 import signal
 import threading
@@ -24,6 +25,7 @@ class BenchmarkResult:
     precision: str
     batch_size: int
     warmup_iterations: int
+    total_samples: int
     benchmark_iterations: int
     # Latency (ms)
     latency_mean_ms: float = 0.0
@@ -77,7 +79,9 @@ class BenchmarkRunner:
         self.model_name = args.model
         self.batch_size = args.batch_size
         self.warmup = args.warmup
-        self.iterations = args.iterations
+        self.samples = args.samples
+        self.iterations = math.ceil(args.samples / args.batch_size)
+        self.remainder = args.samples % args.batch_size  # 0 = último batch cheio
         self.precision = args.precision
         self.device = resolve_device(args.device)
         self.output = args.output
@@ -120,7 +124,9 @@ class BenchmarkRunner:
         for i in range(self.warmup):
             handler.run_inference()
 
-        logger.info(f"🏁 Running benchmark ({self.iterations} iterations)...")
+        last_batch = self.remainder or self.batch_size
+        partial_note = f", último batch: {last_batch}/{self.batch_size}" if self.remainder else ""
+        logger.info(f"🏁 Running benchmark ({self.samples} samples → {self.iterations} iterações{partial_note})...")
 
         ts_bench_start = datetime.now()
         total_start = time.perf_counter()
@@ -142,7 +148,7 @@ class BenchmarkRunner:
 
         # ── Results ───────────────────────────────────────────────────────────
         stats = latency_tracker.stats()
-        throughput_samples = (self.iterations * self.batch_size) / total_elapsed
+        throughput_samples = self.samples / total_elapsed
         throughput_batches = self.iterations / total_elapsed
         gpu_stats = gpu_monitor.stats()
 
@@ -152,6 +158,7 @@ class BenchmarkRunner:
             precision=self.precision,
             batch_size=self.batch_size,
             warmup_iterations=self.warmup,
+            total_samples=self.samples,
             benchmark_iterations=self.iterations,
             latency_mean_ms=stats["mean"],
             latency_median_ms=stats["median"],
@@ -188,7 +195,7 @@ class BenchmarkRunner:
         print(f"  Device         : {r.device}")
         print(f"  Precision      : {r.precision}")
         print(f"  Batch size     : {r.batch_size}")
-        print(f"  Iterations     : {r.benchmark_iterations} (warmup: {r.warmup_iterations})")
+        print(f"  Samples        : {r.total_samples} ({r.benchmark_iterations} iterações, warmup: {r.warmup_iterations})")
         print("-" * 60)
         print(f"  Latency (ms):")
         print(f"    Mean         : {r.latency_mean_ms:.2f}")

@@ -56,7 +56,7 @@ Examples:
     )
     bench.add_argument("--batch-size", type=int, default=1, help="Batch size (default: 1)")
     bench.add_argument("--warmup", type=int, default=5, help="Warmup iterations (default: 5)")
-    bench.add_argument("--iterations", type=int, default=50, help="Benchmark iterations (default: 50)")
+    bench.add_argument("--samples", type=int, default=50, help="Total samples to process; last batch may be partial (default: 50)")
     bench.add_argument("--precision", choices=["fp32", "fp16", "bf16"], default="fp32", help="Precision (default: fp32)")
     bench.add_argument("--device", default="auto", help="Device: auto | cpu | cuda | cuda:0 (default: auto)")
     bench.add_argument("--output", help="Save results to JSON file")
