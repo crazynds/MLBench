@@ -11,6 +11,7 @@ services:
     group_add:
       - "${MEMBERS_GID}"
     volumes:
+       - ./data/cache:/.cache
        - ./:/bench
        - ${CUDA_MPS_PIPE_DIRECTORY}:${CUDA_MPS_PIPE_DIRECTORY}
        - /scratch/lhblago:/scratch/lhblago
