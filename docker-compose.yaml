@@ -6,7 +6,10 @@ services:
     stdin_open: true
     tty: true
     ipc: host
+    pid: host
     user: "${UID}:${GID}"
+    group_add:
+      - "${MEMBERS_GID}"
     volumes:
        - ./:/bench
        - ${CUDA_MPS_PIPE_DIRECTORY}:${CUDA_MPS_PIPE_DIRECTORY}
