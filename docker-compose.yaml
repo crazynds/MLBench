@@ -6,8 +6,11 @@ services:
     stdin_open: true
     tty: true
     ipc: host
+    user: "${UID}:${GID}"
     volumes:
        - ./:/bench
+       - ${CUDA_MPS_PIPE_DIRECTORY}:${CUDA_MPS_PIPE_DIRECTORY}
+       - /scratch/lhblago:/scratch/lhblago
     deploy:
       resources:
         reservations:
@@ -15,6 +18,9 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+    environment:
+      - CUDA_MPS_PIPE_DIRECTORY=${CUDA_MPS_PIPE_DIRECTORY}
+      - CUDA_VISIBLE_DEVICES=0
     ulimits:
       memlock: -1
       stack: 67108864
