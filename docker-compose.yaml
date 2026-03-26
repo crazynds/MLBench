@@ -24,7 +24,7 @@ services:
     environment:
       - CUDA_MPS_PIPE_DIRECTORY=${CUDA_MPS_PIPE_DIRECTORY}
       - CUDA_VISIBLE_DEVICES=0
-      - TRANSFORMERS_CACHE=/bench/tmp
+      - HF_HOME=/bench/tmp
     ulimits:
       memlock: -1
       stack: 67108864
